@@ -63,12 +63,12 @@ import Observation
 /// ### State Access
 /// - ``state``
 @MainActor
-@Observable final class Store<State, Action: Sendable>: Sendable {
+@Observable public final class Store<State, Action: Sendable>: Sendable {
 	/// The current state of the store.
 	///
 	/// This property is observable and will automatically trigger SwiftUI view updates when changed.
 	/// All state updates happen on the main thread to ensure UI consistency.
-	private(set) var state: State
+	public private(set) var state: State
 	
 	/// The reducer function that handles state updates and effect creation.
 	private let reduce: (State, Action) -> (State, Effect<Action>)
@@ -103,7 +103,7 @@ import Observation
 	/// - Parameters:
 	///   - initialState: The initial state value for the store
 	///   - reduce: A pure function that takes the current state and an action, returning a new state and effect
-	init(
+	public init(
 		initialState state: State,
 		reduce: @escaping (State, Action) -> (State, Effect<Action>)
 	) {
@@ -123,7 +123,7 @@ import Observation
 	/// ```
 	///
 	/// - Parameter action: The action to dispatch to the store
-	func send(_ action: Action) {
+	public func send(_ action: Action) {
 		let (newState, effect) = reduce(state, action)
 		state = newState
 		
@@ -236,7 +236,7 @@ import Observation
 	/// ```
 	///
 	/// - Parameter id: The unique identifier of the effect to cancel
-	func cancel(_ id: String) {
+	public func cancel(_ id: String) {
 		if let (taskToCancel, token) = cancellables[id] {
 			print("Attempting to cancel task for id: \(id) with token: \(token)")
 			taskToCancel.cancel()
@@ -289,7 +289,7 @@ import Observation
 ///
 /// ### Effect Transformation
 /// - ``map(_:)``
-enum Effect<Action: Sendable> {
+public enum Effect<Action: Sendable> {
 	/// No side effect to execute.
 	///
 	/// Use this when an action should only update state without triggering any side effects.
@@ -378,7 +378,7 @@ enum Effect<Action: Sendable> {
 	case stream(AsyncStream<Action>, id: String)
 }
 
-extension Effect {
+public extension Effect {
 	/// Transforms an effect from one action type to another.
 	///
 	/// This method is useful when composing different parts of your application that have
