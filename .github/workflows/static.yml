@@ -27,7 +27,7 @@ jobs:
       with:
         fetch-depth: 0
     - name: Set up Swift environment
-      uses: fwal/setup-swift@v1
+      uses: fwal/setup-swift@v2
       with:
         swift-version: '5.10.0'
     # Build the DocC website using swiftPM.
