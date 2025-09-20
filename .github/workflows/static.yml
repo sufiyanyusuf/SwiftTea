@@ -45,7 +45,7 @@ jobs:
             xcodebuild docbuild \
               -scheme SwiftTea \
               -derivedDataPath /tmp/docbuild \
-              -destination 'generic/platform=iOS'
+              -destination 'platform=macOS'
               
             # Find the generated .doccarchive
             DOCC_ARCHIVE=$(find /tmp/docbuild -type d -name "SwiftTea.doccarchive")
