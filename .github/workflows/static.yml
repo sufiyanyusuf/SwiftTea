@@ -24,6 +24,16 @@ jobs:
       uses: swift-actions/setup-swift@v2
       with:
         swift-version: '5.10'
+    - name: Debug package structure
+      run: |
+        echo "Package structure:"
+        find . -name "*.swift" -o -name "*.docc" -o -name "*.md" | head -20
+        echo "Documentation.docc contents:"
+        if [ -d "Sources/SwiftTea/Documentation.docc" ]; then
+          ls -la Sources/SwiftTea/Documentation.docc/
+        else
+          echo "Documentation.docc not found"
+        fi
     - name: Generate Docs
       uses: fwcd/swift-docc-action@v1
       with:
@@ -32,6 +42,14 @@ jobs:
         transform-for-static-hosting: 'true'
         disable-indexing: 'true'
         hosting-base-path: SwiftTea
+    - name: Debug generated content
+      run: |
+        echo "Generated files:"
+        find ./public -type f | head -20
+        if [ -f "./public/index.html" ]; then
+          echo "index.html content (first 10 lines):"
+          head -10 ./public/index.html
+        fi
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
