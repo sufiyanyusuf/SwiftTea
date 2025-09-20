@@ -1,19 +1,15 @@
 name: Deploy DocC Documentation
-
 on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
-
 permissions:
   contents: read
   pages: write
   id-token: write
-
 concurrency:
   group: "pages"
   cancel-in-progress: false
-
 jobs:
   deploy:
     environment:
@@ -34,11 +30,33 @@ jobs:
           
       - name: Build Documentation
         run: |
-          swift package generate-documentation \
-            --target SwiftTea \
-            --output-path ./docs \
-            --transform-for-static-hosting \
-            --hosting-base-path SwiftTea
+          # First try with swift-docc-plugin (if available)
+          if swift package plugin --list | grep -q docc; then
+            echo "Using swift-docc-plugin"
+            swift package --allow-writing-to-directory docs \
+              generate-documentation --target SwiftTea --output-path docs \
+              --transform-for-static-hosting --hosting-base-path SwiftTea
+          else
+            echo "Using xcodebuild docbuild"
+            # Create docs directory
+            mkdir -p docs
+            
+            # Build documentation using xcodebuild docbuild
+            xcodebuild docbuild \
+              -scheme SwiftTea \
+              -derivedDataPath /tmp/docbuild \
+              -destination 'generic/platform=iOS'
+              
+            # Find the generated .doccarchive
+            DOCC_ARCHIVE=$(find /tmp/docbuild -type d -name "SwiftTea.doccarchive")
+            echo "Found DocC archive at: $DOCC_ARCHIVE"
+            
+            # Process the archive for static hosting
+            $(xcrun --find docc) process-archive \
+              transform-for-static-hosting "$DOCC_ARCHIVE" \
+              --hosting-base-path SwiftTea \
+              --output-path docs
+          fi
             
       - name: Setup Pages
         uses: actions/configure-pages@v4
