@@ -44,6 +44,27 @@ jobs:
         transform-for-static-hosting: 'true'
         disable-indexing: 'true'
         hosting-base-path: SwiftTea
+    - name: Fix paths and create missing files
+      run: |
+        echo "Fixing absolute paths to relative paths..."
+        
+        # Fix HTML to use relative paths instead of absolute paths
+        sed -i '' 's|href="/SwiftTea/|href="./|g' ./public/index.html
+        sed -i '' 's|src="/SwiftTea/|src="./|g' ./public/index.html
+        sed -i '' 's|var baseUrl = "/SwiftTea/"|var baseUrl = "./"|g' ./public/index.html
+        
+        # Create missing theme-settings.json if it doesn't exist
+        if [ ! -f "./public/theme-settings.json" ]; then
+          echo "Creating missing theme-settings.json..."
+          echo '{"theme":{"aside":{"border-radius":"6px"}}}' > ./public/theme-settings.json
+        fi
+        
+        echo "Updated HTML paths:"
+        grep -E '(href=|src=|baseUrl)' ./public/index.html | head -10
+        
+        echo "Checking for theme-settings.json:"
+        ls -la ./public/theme-settings.json || echo "Still missing!"
+
     - name: Debug generated content
       run: |
         echo "Generated files:"
