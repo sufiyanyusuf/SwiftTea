@@ -5,7 +5,7 @@
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%2017+%20|%20macOS%2014+%20|%20watchOS%2010+%20|%20tvOS%2017+-blue.svg)](https://developer.apple.com)
 [![Swift Package Manager](https://img.shields.io/badge/Swift_Package_Manager-compatible-orange?style=flat-square)](https://img.shields.io/badge/Swift_Package_Manager-compatible-orange?style=flat-square)
 [![License](https://img.shields.io/github/license/sufiyanyusuf/SwiftTea?refresh=1)](https://github.com/sufiyanyusuf/SwiftTea/blob/main/LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/sufiyanyusuf/SwiftTea)](https://github.com/sufiyanyusuf/SwiftTea/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/sufiyanyusuf/SwiftTea?refresh=1)](https://github.com/sufiyanyusuf/SwiftTea/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/sufiyanyusuf/SwiftTea)](https://github.com/sufiyanyusuf/SwiftTea/issues)
 [![GitHub Release](https://img.shields.io/github/v/release/sufiyanyusuf/SwiftTea)](https://github.com/sufiyanyusuf/SwiftTea/releases)
 [![Documentation](https://img.shields.io/badge/Documentation-Available-brightgreen)](https://sufiyanyusuf.github.io/SwiftTea)
