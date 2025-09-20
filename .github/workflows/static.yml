@@ -33,29 +33,71 @@ jobs:
           
       - name: Build Documentation
         run: |
-          # Build documentation using xcodebuild docbuild
-          xcodebuild docbuild \
-            -scheme SwiftTea \
-            -derivedDataPath /tmp/docbuild \
-            -destination 'platform=macOS'
-            
-          # Find the generated .doccarchive
-          DOCC_ARCHIVE=$(find /tmp/docbuild -type d -name "SwiftTea.doccarchive")
-          echo "Found DocC archive at: $DOCC_ARCHIVE"
+          # Try the swift-docc-plugin approach first since xcodebuild seems to be missing files
+          echo "Attempting documentation generation with swift-docc-plugin..."
           
-          if [ -z "$DOCC_ARCHIVE" ]; then
-            echo "Error: No .doccarchive found"
-            exit 1
+          # Check if the plugin is available
+          if swift package plugin --list | grep -q docc; then
+            echo "✅ Swift-DocC plugin is available"
+            swift package --allow-writing-to-directory docs \
+              generate-documentation \
+              --target SwiftTea \
+              --output-path docs \
+              --transform-for-static-hosting \
+              --hosting-base-path "/${{ env.REPO_NAME }}"
+          else
+            echo "❌ Swift-DocC plugin not available, trying xcodebuild approach..."
+            
+            # Build documentation using xcodebuild docbuild
+            xcodebuild docbuild \
+              -scheme SwiftTea \
+              -derivedDataPath /tmp/docbuild \
+              -destination 'platform=macOS'
+              
+            # Find the generated .doccarchive
+            DOCC_ARCHIVE=$(find /tmp/docbuild -type d -name "SwiftTea.doccarchive")
+            echo "Found DocC archive at: $DOCC_ARCHIVE"
+            
+            if [ -z "$DOCC_ARCHIVE" ]; then
+              echo "Error: No .doccarchive found"
+              exit 1
+            fi
+            
+            # Create docs directory
+            mkdir -p docs
+            
+            # Process the archive for static hosting
+            $(xcrun --find docc) process-archive \
+              transform-for-static-hosting "$DOCC_ARCHIVE" \
+              --hosting-base-path "/${{ env.REPO_NAME }}" \
+              --output-path docs
+              
+            # If theme-settings.json is still missing, try to create it
+            if [ ! -f "docs/theme-settings.json" ]; then
+              echo "Creating missing theme-settings.json..."
+              cat > docs/theme-settings.json << 'EOF'
+{
+  "theme": {
+    "aside": {
+      "border-radius": "6px"
+    }
+  }
+}
+EOF
+            fi
           fi
           
-          # Create docs directory
-          mkdir -p docs
+          # Debug: Show what was generated
+          echo "=== Generated documentation files ==="
+          find docs -type f | head -30
           
-          # Process the archive for static hosting with correct base path
-          $(xcrun --find docc) process-archive \
-            transform-for-static-hosting "$DOCC_ARCHIVE" \
-            --hosting-base-path "/${{ env.REPO_NAME }}" \
-            --output-path docs
+          # Check for key files
+          echo "=== Checking for key files ==="
+          [ -f "docs/index.html" ] && echo "✅ index.html exists" || echo "❌ index.html missing"
+          [ -f "docs/metadata.json" ] && echo "✅ metadata.json exists" || echo "❌ metadata.json missing"
+          [ -d "docs/data" ] && echo "✅ data folder exists" || echo "❌ data folder missing"
+          [ -d "docs/documentation" ] && echo "✅ documentation folder exists" || echo "❌ documentation folder missing"
+          [ -f "docs/theme-settings.json" ] && echo "✅ theme-settings.json exists" || echo "❌ theme-settings.json missing"
             
       - name: Fix Base URL in HTML
         run: |
