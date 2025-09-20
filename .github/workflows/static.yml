@@ -37,7 +37,7 @@ jobs:
           echo "Documentation.docc not found"
         fi
     - name: Generate Docs
-      uses: fwcd/swift-docc-action@v2
+      uses: fwcd/swift-docc-action@v1
       with:
         target: SwiftTea
         output: ./public
