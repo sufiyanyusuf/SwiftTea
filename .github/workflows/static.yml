@@ -62,15 +62,16 @@ jobs:
           # Ensure the baseUrl is correct in the generated HTML
           if [ -f "docs/index.html" ]; then
             echo "Before fix:"
-            grep -n "var baseUrl" docs/index.html || echo "baseUrl not found"
+            head -10 docs/index.html
             
-            # Fix the baseUrl to match GitHub Pages path
+            # Fix the baseUrl variable
             sed -i '' 's|var baseUrl = "/"|var baseUrl = "/${{ env.REPO_NAME }}/"|g' docs/index.html
             
-            echo "After fix:"
-            grep -n "var baseUrl" docs/index.html || echo "baseUrl not found"
+            # Fix all absolute paths in HTML to use the correct base path
+            sed -i '' 's|href="/|href="/${{ env.REPO_NAME }}/|g' docs/index.html
+            sed -i '' 's|src="/|src="/${{ env.REPO_NAME }}/|g' docs/index.html
             
-            echo "First 10 lines of index.html:"
+            echo "After fix:"
             head -10 docs/index.html
           else
             echo "index.html not found!"
