@@ -25,15 +25,14 @@ jobs:
         with:
           xcode-version: '16.1'
           
-      - name: Verify Swift Version
-        run: swift --version
+      - name: Get Repository Name
+        run: |
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+          echo "Repository name: $REPO_NAME"
           
       - name: Build Documentation
         run: |
-          echo "Using xcodebuild docbuild"
-          # Create docs directory
-          mkdir -p docs
-          
           # Build documentation using xcodebuild docbuild
           xcodebuild docbuild \
             -scheme SwiftTea \
@@ -46,33 +45,39 @@ jobs:
           
           if [ -z "$DOCC_ARCHIVE" ]; then
             echo "Error: No .doccarchive found"
-            find /tmp/docbuild -name "*.doccarchive" -type d
             exit 1
           fi
           
-          # List contents of the archive for debugging
-          echo "Contents of DocC archive:"
-          ls -la "$DOCC_ARCHIVE"
+          # Create docs directory
+          mkdir -p docs
           
-          # Process the archive for static hosting
-          echo "Processing archive for static hosting..."
+          # Process the archive for static hosting with correct base path
           $(xcrun --find docc) process-archive \
             transform-for-static-hosting "$DOCC_ARCHIVE" \
-            --hosting-base-path SwiftTea \
+            --hosting-base-path "/${{ env.REPO_NAME }}" \
             --output-path docs
             
-          # Verify output
-          echo "Contents of docs directory:"
-          ls -la docs/
-          
-          # Check if index.html exists
+      - name: Fix Base URL in HTML
+        run: |
+          # Ensure the baseUrl is correct in the generated HTML
           if [ -f "docs/index.html" ]; then
-            echo "✅ index.html found"
-            head -20 docs/index.html
-          else
-            echo "❌ index.html not found"
-          fi
+            echo "Before fix:"
+            grep -n "var baseUrl" docs/index.html || echo "baseUrl not found"
             
+            # Fix the baseUrl to match GitHub Pages path
+            sed -i '' 's|var baseUrl = "/"|var baseUrl = "/${{ env.REPO_NAME }}/"|g' docs/index.html
+            
+            echo "After fix:"
+            grep -n "var baseUrl" docs/index.html || echo "baseUrl not found"
+            
+            echo "First 10 lines of index.html:"
+            head -10 docs/index.html
+          else
+            echo "index.html not found!"
+            ls -la docs/
+            exit 1
+          fi
+          
       - name: Setup Pages
         uses: actions/configure-pages@v4
         
