@@ -8,7 +8,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/sufiyanyusuf/SwiftTea?refresh=1)](https://github.com/sufiyanyusuf/SwiftTea/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/sufiyanyusuf/SwiftTea)](https://github.com/sufiyanyusuf/SwiftTea/issues)
 [![GitHub Release](https://img.shields.io/github/v/release/sufiyanyusuf/SwiftTea)](https://github.com/sufiyanyusuf/SwiftTea/releases)
-[![Documentation](https://img.shields.io/badge/Documentation-Available-brightgreen)](https://sufiyanyusuf.github.io/SwiftTea)
+[![Documentation](https://img.shields.io/badge/Documentation-Available-brightgreen)](https://sufiyanyusuf.github.io/SwiftTea/documentation/swifttea/)
 
 An Elm-inspired state management library for Swift that provides predictable state updates with powerful effect handling capabilities, including support for async operations, cancellable tasks, and streaming data.
 
