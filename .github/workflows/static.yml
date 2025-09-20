@@ -25,37 +25,28 @@ jobs:
         with:
           xcode-version: '16.1'
           
-      - name: Verify Swift Version
-        run: swift --version
-          
       - name: Build Documentation
         run: |
-          # First try with swift-docc-plugin (if available)
-          if swift package plugin --list | grep -q docc; then
-            echo "Using swift-docc-plugin"
-            swift package --allow-writing-to-directory docs \
-              generate-documentation --target SwiftTea --output-path docs \
-              --transform-for-static-hosting --hosting-base-path SwiftTea
+          # Try the Swift DocC plugin approach first
+          swift package --allow-writing-to-directory ./docs \
+            generate-documentation \
+            --target SwiftTea \
+            --disable-indexing \
+            --transform-for-static-hosting \
+            --hosting-base-path SwiftTea \
+            --output-path ./docs
+            
+      - name: Verify Documentation
+        run: |
+          echo "Contents of docs directory:"
+          ls -la docs/
+          if [ -f "docs/index.html" ]; then
+            echo "✅ Documentation generated successfully"
+            echo "First 20 lines of index.html:"
+            head -20 docs/index.html
           else
-            echo "Using xcodebuild docbuild"
-            # Create docs directory
-            mkdir -p docs
-            
-            # Build documentation using xcodebuild docbuild
-            xcodebuild docbuild \
-              -scheme SwiftTea \
-              -derivedDataPath /tmp/docbuild \
-              -destination 'platform=macOS'
-              
-            # Find the generated .doccarchive
-            DOCC_ARCHIVE=$(find /tmp/docbuild -type d -name "SwiftTea.doccarchive")
-            echo "Found DocC archive at: $DOCC_ARCHIVE"
-            
-            # Process the archive for static hosting
-            $(xcrun --find docc) process-archive \
-              transform-for-static-hosting "$DOCC_ARCHIVE" \
-              --hosting-base-path SwiftTea \
-              --output-path docs
+            echo "❌ No index.html found"
+            exit 1
           fi
             
       - name: Setup Pages
