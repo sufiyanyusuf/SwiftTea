@@ -25,102 +25,11 @@ jobs:
         with:
           xcode-version: '16.1'
           
-      - name: Get Repository Name
-        run: |
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
-          echo "Repository name: $REPO_NAME"
-          
-      - name: Build Documentation
-        run: |
-          # Try the swift-docc-plugin approach first since xcodebuild seems to be missing files
-          echo "Attempting documentation generation with swift-docc-plugin..."
-          
-          # Check if the plugin is available
-          if swift package plugin --list | grep -q docc; then
-            echo "✅ Swift-DocC plugin is available"
-            swift package --allow-writing-to-directory docs \
-              generate-documentation \
-              --target SwiftTea \
-              --output-path docs \
-              --transform-for-static-hosting \
-              --hosting-base-path "/${{ env.REPO_NAME }}"
-          else
-            echo "❌ Swift-DocC plugin not available, trying xcodebuild approach..."
-            
-            # Build documentation using xcodebuild docbuild
-            xcodebuild docbuild \
-              -scheme SwiftTea \
-              -derivedDataPath /tmp/docbuild \
-              -destination 'platform=macOS'
-              
-            # Find the generated .doccarchive
-            DOCC_ARCHIVE=$(find /tmp/docbuild -type d -name "SwiftTea.doccarchive")
-            echo "Found DocC archive at: $DOCC_ARCHIVE"
-            
-            if [ -z "$DOCC_ARCHIVE" ]; then
-              echo "Error: No .doccarchive found"
-              exit 1
-            fi
-            
-            # Create docs directory
-            mkdir -p docs
-            
-            # Process the archive for static hosting
-            $(xcrun --find docc) process-archive \
-              transform-for-static-hosting "$DOCC_ARCHIVE" \
-              --hosting-base-path "/${{ env.REPO_NAME }}" \
-              --output-path docs
-              
-            # If theme-settings.json is still missing, try to create it
-            if [ ! -f "docs/theme-settings.json" ]; then
-              echo "Creating missing theme-settings.json..."
-              echo '{"theme":{"aside":{"border-radius":"6px"}}}' > docs/theme-settings.json
-            fi
-          fi
-          
-          # Debug: Show what was generated
-          echo "=== Generated documentation files ==="
-          find docs -type f | head -30
-          
-          # Check for key files
-          echo "=== Checking for key files ==="
-          [ -f "docs/index.html" ] && echo "✅ index.html exists" || echo "❌ index.html missing"
-          [ -f "docs/metadata.json" ] && echo "✅ metadata.json exists" || echo "❌ metadata.json missing"
-          [ -d "docs/data" ] && echo "✅ data folder exists" || echo "❌ data folder missing"
-          [ -d "docs/documentation" ] && echo "✅ documentation folder exists" || echo "❌ documentation folder missing"
-          [ -f "docs/theme-settings.json" ] && echo "✅ theme-settings.json exists" || echo "❌ theme-settings.json missing"
-            
-      - name: Fix Base URL in HTML
-        run: |
-          # Ensure the baseUrl is correct in the generated HTML
-          if [ -f "docs/index.html" ]; then
-            echo "Before fix:"
-            head -10 docs/index.html
-            
-            # Fix the baseUrl variable
-            sed -i '' 's|var baseUrl = "/"|var baseUrl = "/${{ env.REPO_NAME }}/"|g' docs/index.html
-            
-            # Fix all absolute paths in HTML to use the correct base path
-            sed -i '' 's|href="/|href="/${{ env.REPO_NAME }}/|g' docs/index.html
-            sed -i '' 's|src="/|src="/${{ env.REPO_NAME }}/|g' docs/index.html
-            
-            echo "After fix:"
-            head -10 docs/index.html
-          else
-            echo "index.html not found!"
-            ls -la docs/
-            exit 1
-          fi
-          
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-        
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Build and Deploy Documentation
+        uses: fwcd/swift-docc-action@v1.0.2
         with:
-          path: './docs'
-          
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          target: SwiftTea
+          output: docs
+          hosting-base-path: SwiftTea
+          disable-indexing: true
+          transform-for-static-hosting: true
