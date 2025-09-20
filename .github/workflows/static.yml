@@ -75,15 +75,7 @@ jobs:
             # If theme-settings.json is still missing, try to create it
             if [ ! -f "docs/theme-settings.json" ]; then
               echo "Creating missing theme-settings.json..."
-              cat > docs/theme-settings.json << 'EOF'
-{
-  "theme": {
-    "aside": {
-      "border-radius": "6px"
-    }
-  }
-}
-EOF
+              echo '{"theme":{"aside":{"border-radius":"6px"}}}' > docs/theme-settings.json
             fi
           fi
           
