@@ -14,6 +14,7 @@ import Observation
 /// of concerns and predictable state management.
 ///
 /// ```swift
+/// // Without environment
 /// let store = Store(
 ///     initialState: AppState(),
 ///     reduce: { state, action in
@@ -22,13 +23,23 @@ import Observation
 ///             var newState = state
 ///             newState.counter += 1
 ///             return (newState, .none)
+///         }
+///     }
+/// )
+///
+/// // With environment
+/// let store = Store(
+///     initialState: AppState(),
+///     reduce: { state, action, env in
+///         switch action {
 ///         case .loadData:
 ///             return (state, .task {
-///                 let data = try await DataService.fetch()
+///                 let data = try await env.dataService.fetch()
 ///                 return .dataLoaded(data)
 ///             })
 ///         }
-///     }
+///     },
+///     environment: AppEnvironment.live
 /// )
 /// ```
 ///
@@ -53,6 +64,7 @@ import Observation
 ///
 /// ### Creating a Store
 /// - ``init(initialState:reduce:)``
+/// - ``init(initialState:reduce:environment:)``
 ///
 /// ### Dispatching Actions
 /// - ``send(_:)``
@@ -63,7 +75,7 @@ import Observation
 /// ### State Access
 /// - ``state``
 @MainActor
-@Observable public final class Store<State, Action: Sendable>: Sendable {
+@Observable public final class Store<State, Action: Sendable, Environment>: Sendable {
 	/// The current state of the store.
 	///
 	/// This property is observable and will automatically trigger SwiftUI view updates when changed.
@@ -71,44 +83,52 @@ import Observation
 	public private(set) var state: State
 	
 	/// The reducer function that handles state updates and effect creation.
-	private let reduce: (State, Action) -> (State, Effect<Action>)
+	private let reduce: ReducerFunction
+	
+	/// The environment containing dependencies for the reducer.
+	private let environment: Environment
 	
 	/// Dictionary of active cancellable tasks and streams, keyed by their identifier.
 	///
 	/// Each entry contains both the task and a unique token to handle race conditions safely.
 	private var cancellables: [String: (task: Task<Void, Never>, token: UUID)] = [:]
 	
-	/// Creates a new store with the specified initial state and reducer function.
+	/// Type alias for reducer functions.
+	private typealias ReducerFunction = (State, Action, Environment) -> (State, Effect<Action>)
+	
+	/// Creates a new store with the specified initial state, reducer function, and environment.
 	///
-	/// The reducer function should be pure and handle all state transitions based on incoming actions.
-	/// Side effects should be returned as ``Effect`` values rather than performed directly in the reducer.
+	/// Use this initializer when your reducer needs access to external dependencies like
+	/// network services, databases, or other side-effect producing systems.
 	///
 	/// ```swift
 	/// let store = Store(
-	///     initialState: AppState(counter: 0),
-	///     reduce: { state, action in
-	///         var newState = state
+	///     initialState: AppState(),
+	///     reduce: { state, action, env in
 	///         switch action {
-	///         case .increment:
-	///             newState.counter += 1
-	///             return (newState, .none)
-	///         case .reset:
-	///             newState.counter = 0
-	///             return (newState, .none)
+	///         case .loadData:
+	///             return (state, .task {
+	///                 let data = try await env.apiService.fetch()
+	///                 return .dataLoaded(data)
+	///             })
 	///         }
-	///     }
+	///     },
+	///     environment: AppEnvironment.live
 	/// )
 	/// ```
 	///
 	/// - Parameters:
 	///   - initialState: The initial state value for the store
-	///   - reduce: A pure function that takes the current state and an action, returning a new state and effect
+	///   - reduce: A pure function that takes the current state, an action, and environment, returning a new state and effect
+	///   - environment: The environment containing dependencies for the reducer
 	public init(
 		initialState state: State,
-		reduce: @escaping (State, Action) -> (State, Effect<Action>)
+		reduce: @escaping (State, Action, Environment) -> (State, Effect<Action>),
+		environment: Environment
 	) {
 		self.state = state
 		self.reduce = reduce
+		self.environment = environment
 	}
 	
 	/// Dispatches an action to the store, triggering state updates and effect execution.
@@ -124,7 +144,7 @@ import Observation
 	///
 	/// - Parameter action: The action to dispatch to the store
 	public func send(_ action: Action) {
-		let (newState, effect) = reduce(state, action)
+		let (newState, effect) = reduce(state, action, environment)
 		state = newState
 		
 		handleEffect(effect)
@@ -133,8 +153,8 @@ import Observation
 	/// Handles the execution of effects returned from the reducer.
 	///
 	/// This method processes different types of effects including one-time tasks,
-	/// cancellable operations, streams, and effect sequences. It manages the lifecycle
-	/// of long-running operations and ensures proper cleanup.
+	/// cancellable operations, streams, cancellation requests, and effect sequences.
+	/// It manages the lifecycle of long-running operations and ensures proper cleanup.
 	///
 	/// - Parameter effect: The effect to execute
 	private func handleEffect(_ effect: Effect<Action>) {
@@ -218,6 +238,9 @@ import Observation
 				
 				cancellables[id] = (task: newConsumeTask, token: newConsumeTaskToken)
 				print("[Store.handleEffect] Stored new consumer task for ID: \(id) with token: \(newConsumeTaskToken)")
+				
+			case .cancel(let id):
+				cancel(id)
 		}
 	}
 	
@@ -244,6 +267,46 @@ import Observation
 		} else {
 			print("No active cancellable effect or stream found with id: \(id) to cancel.")
 		}
+	}
+}
+
+// MARK: - Convenience Initializer for Environment-less Store
+
+public extension Store {
+	/// Creates a new store without an environment dependency.
+	///
+	/// Use this initializer when your reducer doesn't need access to external dependencies.
+	/// The reducer function receives only the current state and action.
+	///
+	/// ```swift
+	/// let store = Store(
+	///     initialState: AppState(counter: 0),
+	///     reduce: { state, action in
+	///         var newState = state
+	///         switch action {
+	///         case .increment:
+	///             newState.counter += 1
+	///             return (newState, .none)
+	///         case .reset:
+	///             newState.counter = 0
+	///             return (newState, .none)
+	///         }
+	///     }
+	/// )
+	/// ```
+	///
+	/// - Parameters:
+	///   - initialState: The initial state value for the store
+	///   - reduce: A pure function that takes the current state and an action, returning a new state and effect
+	convenience init(
+		initialState state: State,
+		reduce: @escaping (State, Action) -> (State, Effect<Action>)
+	) where Environment == Void {
+		self.init(
+			initialState: state,
+			reduce: { state, action, _ in reduce(state, action) },
+			environment: ()
+		)
 	}
 }
 
@@ -274,6 +337,9 @@ import Observation
 ///     let result = try await longOperation()
 ///     return .operationComplete(result)
 /// }, "operation-id"))
+///
+/// // Cancel a running effect
+/// return (newState, .cancel("operation-id"))
 /// ```
 ///
 /// ## Topics
@@ -286,6 +352,7 @@ import Observation
 /// ### Advanced Effects
 /// - ``cancellable(_:_:)``
 /// - ``stream(_:id:)``
+/// - ``cancel(_:)``
 ///
 /// ### Effect Transformation
 /// - ``map(_:)``
@@ -376,6 +443,32 @@ public enum Effect<Action: Sendable> {
 	///   - stream: An AsyncStream that yields actions
 	///   - id: A unique identifier for this stream
 	case stream(AsyncStream<Action>, id: String)
+	
+	/// Cancel a running cancellable effect or stream by its identifier.
+	///
+	/// Use this effect to cancel long-running operations from within the reducer.
+	/// This is particularly useful when you need to cancel an effect based on state
+	/// changes or in response to user actions. The effect will be cancelled immediately
+	/// and removed from the store's tracking.
+	///
+	/// ```swift
+	/// case .cancelSearch:
+	///     return (state, .cancel("search"))
+	///
+	/// case .startNewSearch(let query):
+	///     var newState = state
+	///     newState.searchQuery = query
+	///     return (newState, .sequence([
+	///         .cancel("previous-search"),
+	///         .cancellable({
+	///             let results = try await searchService.search(query)
+	///             return .searchResults(results)
+	///         }, "previous-search")
+	///     ]))
+	/// ```
+	///
+	/// - Parameter id: The unique identifier of the effect to cancel
+	case cancel(String)
 }
 
 public extension Effect {
@@ -428,6 +521,8 @@ public extension Effect {
 					continuation.onTermination = { @Sendable _ in task.cancel() }
 				}
 				return .stream(mappedStream, id: id)
+			case .cancel(let id):
+				return .cancel(id)
 		}
 	}
 }

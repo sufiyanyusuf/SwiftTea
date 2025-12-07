@@ -36,6 +36,7 @@ SwiftTea provides a predictable state management solution for Swift applications
 - ``Effect/task(_:)``
 - ``Effect/cancellable(_:_:)``
 - ``Effect/stream(_:id:)``
+- ``Effect/cancel(_:)``
 - ``Effect/sequence(_:)``
 
 ### Effect Transformation

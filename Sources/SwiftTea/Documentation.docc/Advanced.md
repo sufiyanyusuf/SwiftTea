@@ -10,7 +10,7 @@ This guide covers advanced patterns including effect composition, cancellation s
 
 ### Cancellable Operations
 
-Use cancellable effects for operations that users might want to interrupt:
+Use cancellable effects for operations that users might want to interrupt. You can cancel effects either imperatively using `store.cancel()` or declaratively from within the reducer using `.cancel()`:
 
 ```swift
 enum SearchAction: Sendable {
@@ -33,7 +33,8 @@ return .searchResults(results)
 case .cancelSearch:
 var newState = state
 newState.isSearching = false
-return (newState, .none) // Store automatically cancels "search" effect
+// Cancel the effect declaratively from the reducer
+return (newState, .cancel("search"))
 
 case .searchResults(let results):
 var newState = state
@@ -42,6 +43,42 @@ newState.isSearching = false
 return (newState, .none)
 }
 }
+```
+
+### Automatic Cancellation with Replacement
+
+When you start a new cancellable effect with the same ID, SwiftTea automatically cancels the previous one:
+
+```swift
+case .search(let newQuery):
+var newState = state
+newState.query = newQuery
+newState.isSearching = true
+
+// Starting a new search automatically cancels any existing "search" effect
+return (newState, .cancellable({
+let results = try await SearchService.search(newQuery)
+return .searchResults(results)
+}, "search"))
+```
+
+### Cancellation with Effect Sequences
+
+Combine cancellation with other effects using `.sequence()`:
+
+```swift
+case .startNewSearch(let query):
+var newState = state
+newState.searchQuery = query
+newState.isSearching = true
+
+return (newState, .sequence([
+.cancel("previous-search"),
+.cancellable({
+let results = try await SearchService.search(query)
+return .searchResults(results)
+}, "previous-search")
+]))
 ```
 
 ### Streaming Data
@@ -75,7 +112,8 @@ locationManager.stopUpdatingLocation()
 return (state, .stream(locationStream, id: "location-updates"))
 
 case .stopLocationUpdates:
-return (state, .none) // Stream will be cancelled automatically
+// Cancel the stream declaratively from the reducer
+return (state, .cancel("location-updates"))
 
 case .locationUpdate(let location):
 var newState = state
@@ -98,7 +136,89 @@ return (state, .sequence([
 ]))
 ```
 
+### Conditional Cancellation
+
+Cancel effects based on state conditions:
+
+```swift
+case .userLoggedOut:
+var newState = state
+newState.isAuthenticated = false
+
+// Cancel all user-related background operations
+return (newState, .sequence([
+.cancel("user-data-sync"),
+.cancel("notification-stream"),
+.cancel("analytics-upload")
+]))
+```
+
 ## Architecture Patterns
+
+### Using Environments for Dependency Injection
+
+SwiftTea's Store supports an environment parameter for dependency injection, making your reducers testable and flexible:
+
+```swift
+// Define your environment with all dependencies
+struct AppEnvironment {
+let apiService: APIServiceProtocol
+let dataStore: DataStoreProtocol
+let analytics: AnalyticsProtocol
+
+// Live implementation for production
+static let live = AppEnvironment(
+apiService: LiveAPIService(),
+dataStore: UserDefaultsDataStore(),
+analytics: FirebaseAnalytics()
+)
+
+// Mock implementation for testing
+static let mock = AppEnvironment(
+apiService: MockAPIService(),
+dataStore: InMemoryDataStore(),
+analytics: MockAnalytics()
+)
+}
+
+// Reducer with environment access
+func appReducer(
+state: AppState,
+action: AppAction,
+environment: AppEnvironment
+) -> (AppState, Effect<AppAction>) {
+switch action {
+case .loadData:
+return (state, .task {
+let data = try await environment.apiService.fetch()
+return .dataLoaded(data)
+})
+}
+}
+
+// Create store with environment
+let store = Store(
+initialState: AppState(),
+reduce: appReducer,
+environment: .live
+)
+```
+
+For simple reducers without dependencies, use the convenience initializer that doesn't require an environment:
+
+```swift
+let simpleStore = Store(
+initialState: CounterState(value: 0),
+reduce: { state, action in
+var newState = state
+switch action {
+case .increment:
+newState.value += 1
+return (newState, .none)
+}
+}
+)
+```
 
 ### Feature-Based Organization
 
@@ -268,6 +388,26 @@ XCTFail("Expected no effect")
 }
 ```
 
+### Testing Cancellation
+
+Test that cancellation effects are returned correctly:
+
+```swift
+func testSearchCancellation() {
+let initialState = SearchState(isSearching: true)
+let (newState, effect) = searchReducer(state: initialState, action: .cancelSearch)
+
+XCTAssertFalse(newState.isSearching)
+
+switch effect {
+case .cancel(let id):
+XCTAssertEqual(id, "search")
+default:
+XCTFail("Expected cancel effect")
+}
+}
+```
+
 ### Testing Effects
 
 Create test helpers for effect validation:
@@ -287,32 +427,64 @@ case .task: return true
 default: return false
 }
 }
+
+var cancelID: String? {
+switch self {
+case .cancel(let id): return id
+default: return nil
+}
+}
 }
 ```
 
 ### Mock Dependencies
 
-Inject dependencies to make effects testable:
+Use the Store's environment parameter to inject dependencies and make effects testable:
 
 ```swift
-struct Dependencies {
+struct AppEnvironment {
 let networkService: NetworkServiceProtocol
 let locationService: LocationServiceProtocol
+
+static let live = AppEnvironment(
+networkService: LiveNetworkService(),
+locationService: LiveLocationService()
+)
+
+static let test = AppEnvironment(
+networkService: MockNetworkService(),
+locationService: MockLocationService()
+)
 }
 
 // In your reducer
 func appReducer(
 state: AppState, 
 action: AppAction,
-dependencies: Dependencies = .live
+environment: AppEnvironment
 ) -> (AppState, Effect<AppAction>) {
-// Use dependencies.networkService instead of direct NetworkService calls
+switch action {
+case .fetchData:
+return (state, .task {
+// Use environment.networkService instead of direct service calls
+let data = try await environment.networkService.fetchData()
+return .dataLoaded(data)
+})
+}
 }
 
-// In tests
-let testDependencies = Dependencies(
-networkService: MockNetworkService(),
-locationService: MockLocationService()
+// Create store with live dependencies
+let store = Store(
+initialState: AppState(),
+reduce: appReducer,
+environment: .live
+)
+
+// In tests, create store with test dependencies
+let testStore = Store(
+initialState: AppState(),
+reduce: appReducer,
+environment: .test
 )
 ```
 
@@ -372,8 +544,9 @@ await operation()
 
 1. **Keep reducers pure** - No side effects in reducer functions
 2. **Use meaningful IDs** - Choose descriptive identifiers for cancellable effects
-3. **Handle errors explicitly** - Use Result types or error-specific actions
-4. **Normalize state** - Avoid deeply nested state structures
-5. **Test reducers thoroughly** - Take advantage of their pure nature
-6. **Inject dependencies** - Make effects testable through dependency injection
-7. **Cancel appropriately** - Clean up long-running operations when no longer needed
+3. **Cancel declaratively** - Use `.cancel()` effects within reducers for better testability
+4. **Handle errors explicitly** - Use Result types or error-specific actions
+5. **Normalize state** - Avoid deeply nested state structures
+6. **Test reducers thoroughly** - Take advantage of their pure nature
+7. **Inject dependencies** - Make effects testable through dependency injection
+8. **Clean up on exit** - Cancel long-running operations when features are dismissed or users log out
